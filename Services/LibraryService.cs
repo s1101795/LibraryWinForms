@@ -115,5 +115,120 @@ namespace LibraryWinForms.Services
                 throw new Exception("查無此會員尚未歸還的此書借閱紀錄。");
             await ReturnAsync(loan.LoanId, finePerDay);
         }
+
+        public async Task<int> AddBookWithAuthorsAsync(
+            string isbn, string title, string? publisher, int? year, string[] authorNames, string? category)
+        {
+            using var db = new LibraryContext();
+            var book = new Book
+            {
+                ISBN = isbn,
+                Title = title,
+                Publisher = publisher,
+                PublishYear = year,
+                Category = category,
+                CreatedAt = DateTime.UtcNow
+            };
+            db.Books.Add(book);
+            await db.SaveChangesAsync();
+
+            foreach (var name in authorNames)
+            {
+                var author = await db.Authors.FirstOrDefaultAsync(a => a.Name == name.Trim());
+                if (author == null)
+                {
+                    author = new Author { Name = name.Trim() };
+                    db.Authors.Add(author);
+                    await db.SaveChangesAsync();
+                }
+                db.BookAuthors.Add(new BookAuthor { BookId = book.BookId, AuthorId = author.AuthorId });
+            }
+            await db.SaveChangesAsync();
+            return book.BookId;
+        }
+
+        public async Task UpdateBookAsync(
+            int bookId, string isbn, string title, string? publisher, int? year, string[] authorNames, string? category)
+        {
+            using var db = new LibraryContext();
+            var book = await db.Books.Include(b => b.BookAuthors).FirstOrDefaultAsync(b => b.BookId == bookId);
+            if (book == null) throw new Exception("查無此書籍");
+            book.ISBN = isbn;
+            book.Title = title;
+            book.Publisher = publisher;
+            book.PublishYear = year;
+            book.Category = category;
+
+            db.BookAuthors.RemoveRange(book.BookAuthors);
+
+            foreach (var name in authorNames)
+            {
+                var author = await db.Authors.FirstOrDefaultAsync(a => a.Name == name.Trim());
+                if (author == null)
+                {
+                    author = new Author { Name = name.Trim() };
+                    db.Authors.Add(author);
+                    await db.SaveChangesAsync();
+                }
+                db.BookAuthors.Add(new BookAuthor { BookId = book.BookId, AuthorId = author.AuthorId });
+            }
+            await db.SaveChangesAsync();
+        }
+
+        public async Task DeleteBookAsync(int bookId)
+        {
+            using var db = new LibraryContext();
+            var book = await db.Books
+                .Include(b => b.Copies)
+                    .ThenInclude(c => c.Loans)
+                .Include(b => b.BookAuthors)
+                .FirstOrDefaultAsync(b => b.BookId == bookId);
+            if (book == null) throw new Exception("查無此書籍");
+
+            // 檢查是否有出借中館藏
+            bool hasOpenLoan = book.Copies.Any(c => c.Loans.Any(l => l.ReturnDate == null));
+            if (hasOpenLoan)
+                throw new Exception("此書出借中，無法刪除");
+
+            // 刪除所有館藏的借閱紀錄
+            foreach (var copy in book.Copies)
+            {
+                db.Loans.RemoveRange(copy.Loans);
+            }
+            // 刪除所有館藏
+            db.Copies.RemoveRange(book.Copies);
+
+            // 刪除作者關聯
+            db.BookAuthors.RemoveRange(book.BookAuthors);
+
+            // 刪除書籍
+            db.Books.Remove(book);
+
+            await db.SaveChangesAsync();
+        }
+
+        public async Task UpdateMemberAsync(int memberId, string name, string email, string? phone)
+        {
+            using var db = new LibraryContext();
+            var member = await db.Members.FindAsync(memberId);
+            if (member == null) throw new Exception("查無此會員");
+            member.Name = name;
+            member.Email = email;
+            member.Phone = phone;
+            await db.SaveChangesAsync();
+        }
+
+        public async Task DeleteMemberAsync(int memberId)
+        {
+            using var db = new LibraryContext();
+            var member = await db.Members
+                .Include(m => m.Loans)
+                .FirstOrDefaultAsync(m => m.MemberId == memberId);
+            if (member == null) throw new Exception("查無此會員");
+            if (member.Loans.Any(l => l.ReturnDate == null))
+                throw new Exception("此會員有未歸還書籍，無法刪除");
+            db.Members.Remove(member);
+            await db.SaveChangesAsync();
+        }
     }
 }

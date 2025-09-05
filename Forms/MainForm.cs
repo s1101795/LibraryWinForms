@@ -18,6 +18,8 @@ namespace LibraryWinForms.Forms
         private TextBox tbBookSearch = new TextBox() { Width = 200 };
         private Button btnBookSearch = new Button() { Text = "搜尋" };
         private Button btnAddBook = new Button() { Text = "新增書籍" };
+        private Button btnEditBook = new Button() { Text = "更新書籍" };
+        private Button btnDeleteBook = new Button() { Text = "刪除書籍" };
         private DataGridView gridBooks = new DataGridView() { Dock = DockStyle.Fill, ReadOnly = true, AutoGenerateColumns = true };
         private DataGridView gridCopies = new DataGridView() { Dock = DockStyle.Fill, ReadOnly = true, AutoGenerateColumns = true };
         private Button btnAddCopy = new Button() { Text = "新增館藏" };
@@ -26,6 +28,8 @@ namespace LibraryWinForms.Forms
         private TextBox tbMemberSearch = new TextBox() { Width = 200 };
         private Button btnMemberSearch = new Button() { Text = "搜尋" };
         private Button btnAddMember = new Button() { Text = "新增會員" };
+        private Button btnEditMember = new Button() { Text = "更新會員" };
+        private Button btnDeleteMember = new Button() { Text = "刪除會員" };
         private DataGridView gridMembers = new DataGridView() { Dock = DockStyle.Fill, ReadOnly = true, AutoGenerateColumns = true };
 
         // Borrow/Return tab controls
@@ -80,6 +84,8 @@ namespace LibraryWinForms.Forms
             top.Controls.Add(tbBookSearch);
             top.Controls.Add(btnBookSearch);
             top.Controls.Add(btnAddBook);
+            top.Controls.Add(btnEditBook);
+            top.Controls.Add(btnDeleteBook);
 
             gridBooks.Dock = DockStyle.Fill;
             panel1.Controls.Add(gridBooks); // 先加 DataGridView
@@ -113,6 +119,8 @@ namespace LibraryWinForms.Forms
 
             btnBookSearch.Click += async (_, __) => await ReloadBooksAsync();
             btnAddBook.Click += async (_, __) => await AddBookDialogAsync();
+            btnEditBook.Click += async (_, __) => await EditBookDialogAsync();
+            btnDeleteBook.Click += async (_, __) => await DeleteBookAsync();
             gridBooks.SelectionChanged += async (_, __) => await LoadCopiesForSelectedBookAsync();
             btnAddCopy.Click += async (_, __) => await AddCopyDialogAsync();
 
@@ -142,6 +150,8 @@ namespace LibraryWinForms.Forms
             top.Controls.Add(tbMemberSearch);
             top.Controls.Add(btnMemberSearch);
             top.Controls.Add(btnAddMember);
+            top.Controls.Add(btnEditMember);
+            top.Controls.Add(btnDeleteMember);
 
             // 主 Panel
             var panel = new Panel() { Dock = DockStyle.Fill };
@@ -160,6 +170,8 @@ namespace LibraryWinForms.Forms
 
             btnMemberSearch.Click += async (_, __) => await ReloadMembersAsync();
             btnAddMember.Click += async (_, __) => await AddMemberDialogAsync();
+            btnEditMember.Click += async (_, __) => await EditMemberDialogAsync();
+            btnDeleteMember.Click += async (_, __) => await DeleteMemberAsync();
             tab.Enter += async (_, __) => await ReloadMembersAsync();
 
             gridMembers.DataBindingComplete += OnGridMembersDataBindingComplete;
@@ -216,20 +228,22 @@ namespace LibraryWinForms.Forms
             try
             {
                 var list = await _svc.GetBooksAsync(tbBookSearch.Text.Trim());
-                // 投影成匿名型別，移除 Copies 欄位，BookAuthors 欄位顯示作者名字
-                gridBooks.DataSource = list.Select(b => new
-                {
-                    b.BookId,
-                    b.ISBN,
-                    b.Title,
-                    b.Category,
-                    b.Publisher,
-                    b.PublishYear,
-                    b.CreatedAt,
-                    Authors = b.BookAuthors != null
-                        ? string.Join(", ", b.BookAuthors.Select(ba => ba.Author != null ? ba.Author.Name : ""))
-                        : ""
-                }).ToList();
+                gridBooks.DataSource = list
+                    .OrderBy(b => b.BookId) // 依 BookId 排序
+                    .Select(b => new
+                    {
+                        b.BookId,
+                        b.ISBN,
+                        b.Title,
+                        b.Category,
+                        b.Publisher,
+                        b.PublishYear,
+                        b.CreatedAt,
+                        Authors = b.BookAuthors != null
+                            ? string.Join(", ", b.BookAuthors.Select(ba => ba.Author != null ? ba.Author.Name : ""))
+                            : ""
+                    })
+                    .ToList();
             }
             catch (Exception ex)
             {
@@ -270,24 +284,28 @@ namespace LibraryWinForms.Forms
 
         private async Task AddBookDialogAsync()
         {
-            using var f = new Form() { Text = "新增書籍", Width = 420, Height = 240 };
+            using var f = new Form() { Text = "新增書籍", Width = 420, Height = 320 };
             var tbIsbn = new TextBox() { Width = 260 };
             var tbTitle = new TextBox() { Width = 260 };
+            var tbCategory = new TextBox() { Width = 260 }; // 新增分類欄位
             var tbPublisher = new TextBox() { Width = 260 };
             var tbYear = new TextBox() { Width = 100 };
+            var tbAuthors = new TextBox() { Width = 260 };
             var ok = new Button() { Text = "儲存", DialogResult = DialogResult.OK };
             var cancel = new Button() { Text = "取消", DialogResult = DialogResult.Cancel };
 
-            var panel = new TableLayoutPanel() { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 5, Padding = new Padding(10) };
+            var panel = new TableLayoutPanel() { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 7, Padding = new Padding(10) };
             panel.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             panel.Controls.Add(new Label() { Text = "ISBN：", AutoSize = true }, 0, 0); panel.Controls.Add(tbIsbn, 1, 0);
             panel.Controls.Add(new Label() { Text = "書名：", AutoSize = true }, 0, 1); panel.Controls.Add(tbTitle, 1, 1);
-            panel.Controls.Add(new Label() { Text = "出版社：", AutoSize = true }, 0, 2); panel.Controls.Add(tbPublisher, 1, 2);
-            panel.Controls.Add(new Label() { Text = "出版年：", AutoSize = true }, 0, 3); panel.Controls.Add(tbYear, 1, 3);
+            panel.Controls.Add(new Label() { Text = "分類：", AutoSize = true }, 0, 2); panel.Controls.Add(tbCategory, 1, 2);
+            panel.Controls.Add(new Label() { Text = "出版社：", AutoSize = true }, 0, 3); panel.Controls.Add(tbPublisher, 1, 3);
+            panel.Controls.Add(new Label() { Text = "出版年：", AutoSize = true }, 0, 4); panel.Controls.Add(tbYear, 1, 4);
+            panel.Controls.Add(new Label() { Text = "作者（可多位，逗號分隔）：", AutoSize = true }, 0, 5); panel.Controls.Add(tbAuthors, 1, 5);
             var btns = new FlowLayoutPanel() { FlowDirection = FlowDirection.RightToLeft, Dock = DockStyle.Fill };
             btns.Controls.Add(ok); btns.Controls.Add(cancel);
-            panel.Controls.Add(btns, 1, 4);
+            panel.Controls.Add(btns, 1, 6);
             f.Controls.Add(panel);
 
             if (f.ShowDialog(this) == DialogResult.OK)
@@ -295,7 +313,15 @@ namespace LibraryWinForms.Forms
                 try
                 {
                     int? year = int.TryParse(tbYear.Text, out var y) ? y : null;
-                    await _svc.AddBookAsync(tbIsbn.Text.Trim(), tbTitle.Text.Trim(), tbPublisher.Text.Trim(), year);
+                    var authors = tbAuthors.Text.Split(',').Select(a => a.Trim()).Where(a => !string.IsNullOrEmpty(a)).ToArray();
+                    await _svc.AddBookWithAuthorsAsync(
+                        tbIsbn.Text.Trim(),
+                        tbTitle.Text.Trim(),
+                        tbPublisher.Text.Trim(),
+                        year,
+                        authors,
+                        tbCategory.Text.Trim() // 傳遞分類
+                    );
                     await ReloadBooksAsync();
                 }
                 catch (Exception ex)
@@ -305,13 +331,111 @@ namespace LibraryWinForms.Forms
             }
         }
 
-        private async Task AddCopyDialogAsync()
+        private async Task EditBookDialogAsync()
         {
-            if (gridBooks.CurrentRow?.DataBoundItem is not Book b)
+            if (gridBooks.CurrentRow?.DataBoundItem == null)
             {
                 MessageBox.Show("請先選擇一本書。");
                 return;
             }
+            var bookIdProp = gridBooks.CurrentRow.DataBoundItem.GetType().GetProperty("BookId");
+            if (bookIdProp == null) return;
+            int bookId = (int)bookIdProp.GetValue(gridBooks.CurrentRow.DataBoundItem)!;
+
+            var book = (await _svc.GetBooksAsync()).FirstOrDefault(b => b.BookId == bookId);
+            if (book == null) return;
+
+            using var f = new Form() { Text = "更新書籍", Width = 420, Height = 320 };
+            var tbIsbn = new TextBox() { Width = 260, Text = book.ISBN };
+            var tbTitle = new TextBox() { Width = 260, Text = book.Title };
+            var tbCategory = new TextBox() { Width = 260, Text = book.Category ?? "" }; // 新增分類欄位
+            var tbPublisher = new TextBox() { Width = 260, Text = book.Publisher ?? "" };
+            var tbYear = new TextBox() { Width = 100, Text = book.PublishYear?.ToString() ?? "" };
+            var tbAuthors = new TextBox() { Width = 260, Text = string.Join(", ", book.BookAuthors.Select(ba => ba.Author.Name)) };
+            var ok = new Button() { Text = "儲存", DialogResult = DialogResult.OK };
+            var cancel = new Button() { Text = "取消", DialogResult = DialogResult.Cancel };
+
+            var panel = new TableLayoutPanel() { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 7, Padding = new Padding(10) };
+            panel.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            panel.Controls.Add(new Label() { Text = "ISBN：", AutoSize = true }, 0, 0); panel.Controls.Add(tbIsbn, 1, 0);
+            panel.Controls.Add(new Label() { Text = "書名：", AutoSize = true }, 0, 1); panel.Controls.Add(tbTitle, 1, 1);
+            panel.Controls.Add(new Label() { Text = "分類：", AutoSize = true }, 0, 2); panel.Controls.Add(tbCategory, 1, 2);
+            panel.Controls.Add(new Label() { Text = "出版社：", AutoSize = true }, 0, 3); panel.Controls.Add(tbPublisher, 1, 3);
+            panel.Controls.Add(new Label() { Text = "出版年：", AutoSize = true }, 0, 4); panel.Controls.Add(tbYear, 1, 4);
+            panel.Controls.Add(new Label() { Text = "作者（可多位，逗號分隔）：", AutoSize = true }, 0, 5); panel.Controls.Add(tbAuthors, 1, 5);
+            var btns = new FlowLayoutPanel() { FlowDirection = FlowDirection.RightToLeft, Dock = DockStyle.Fill };
+            btns.Controls.Add(ok); btns.Controls.Add(cancel);
+            panel.Controls.Add(btns, 1, 6);
+            f.Controls.Add(panel);
+
+            if (f.ShowDialog(this) == DialogResult.OK)
+            {
+                try
+                {
+                    int? year = int.TryParse(tbYear.Text, out var y) ? y : null;
+                    var authors = tbAuthors.Text.Split(',').Select(a => a.Trim()).Where(a => !string.IsNullOrEmpty(a)).ToArray();
+                    await _svc.UpdateBookAsync(
+                        bookId,
+                        tbIsbn.Text.Trim(),
+                        tbTitle.Text.Trim(),
+                        tbPublisher.Text.Trim(),
+                        year,
+                        authors,
+                        tbCategory.Text.Trim() // 傳遞分類
+                    );
+                    await ReloadBooksAsync();
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show("更新書籍失敗：" + ex.Message);
+                }
+            }
+        }
+
+        private async Task DeleteBookAsync()
+        {
+            if (gridBooks.CurrentRow?.DataBoundItem == null)
+            {
+                MessageBox.Show("請先選擇一本書。");
+                return;
+            }
+            var bookIdProp = gridBooks.CurrentRow.DataBoundItem.GetType().GetProperty("BookId");
+            if (bookIdProp == null) return;
+            int bookId = (int)bookIdProp.GetValue(gridBooks.CurrentRow.DataBoundItem)!;
+
+            var result = MessageBox.Show("確認要刪除此書籍及所有館藏嗎？", "刪除確認", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+            if (result == DialogResult.Yes)
+            {
+                try
+                {
+                    await _svc.DeleteBookAsync(bookId);
+                    await ReloadBooksAsync();
+                    gridCopies.DataSource = null;
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show("刪除書籍失敗：" + ex.Message);
+                }
+            }
+        }
+
+        private async Task AddCopyDialogAsync()
+        {
+            // 從 gridBooks 取得選取列的 BookId
+            if (gridBooks.CurrentRow?.DataBoundItem == null)
+            {
+                MessageBox.Show("請先選擇一本書。");
+                return;
+            }
+            var bookIdProp = gridBooks.CurrentRow.DataBoundItem.GetType().GetProperty("BookId");
+            if (bookIdProp == null)
+            {
+                MessageBox.Show("請先選擇一本書。");
+                return;
+            }
+            int bookId = (int)bookIdProp.GetValue(gridBooks.CurrentRow.DataBoundItem)!;
+
             using var f = new Form() { Text = "新增館藏", Width = 380, Height = 180 };
             var tbBarcode = new TextBox() { Width = 220 };
             var tbLoc = new TextBox() { Width = 220 };
@@ -332,7 +456,7 @@ namespace LibraryWinForms.Forms
             {
                 try
                 {
-                    await _svc.AddCopyAsync(b.BookId, tbBarcode.Text.Trim(), tbLoc.Text.Trim());
+                    await _svc.AddCopyAsync(bookId, tbBarcode.Text.Trim(), tbLoc.Text.Trim());
                     await LoadCopiesForSelectedBookAsync();
                 }
                 catch (Exception ex)
@@ -402,6 +526,78 @@ namespace LibraryWinForms.Forms
                 catch (Exception ex)
                 {
                     MessageBox.Show("新增會員失敗：" + ex.Message);
+                }
+            }
+        }
+
+        private async Task EditMemberDialogAsync()
+        {
+            if (gridMembers.CurrentRow?.DataBoundItem == null)
+            {
+                MessageBox.Show("請先選擇一位會員。");
+                return;
+            }
+            var memberIdProp = gridMembers.CurrentRow.DataBoundItem.GetType().GetProperty("MemberId");
+            if (memberIdProp == null) return;
+            int memberId = (int)memberIdProp.GetValue(gridMembers.CurrentRow.DataBoundItem)!;
+
+            var member = (await _svc.GetMembersAsync()).FirstOrDefault(m => m.MemberId == memberId);
+            if (member == null) return;
+
+            using var f = new Form() { Text = "更新會員", Width = 420, Height = 220 };
+            var tbName = new TextBox() { Width = 260, Text = member.Name };
+            var tbEmail = new TextBox() { Width = 260, Text = member.Email };
+            var tbPhone = new TextBox() { Width = 260, Text = member.Phone };
+            var ok = new Button() { Text = "儲存", DialogResult = DialogResult.OK };
+            var cancel = new Button() { Text = "取消", DialogResult = DialogResult.Cancel };
+
+            var panel = new TableLayoutPanel() { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 4, Padding = new Padding(10) };
+            panel.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            panel.Controls.Add(new Label() { Text = "姓名：", AutoSize = true }, 0, 0); panel.Controls.Add(tbName, 1, 0);
+            panel.Controls.Add(new Label() { Text = "Email：", AutoSize = true }, 0, 1); panel.Controls.Add(tbEmail, 1, 1);
+            panel.Controls.Add(new Label() { Text = "電話：", AutoSize = true }, 0, 2); panel.Controls.Add(tbPhone, 1, 2);
+            var btns = new FlowLayoutPanel() { FlowDirection = FlowDirection.RightToLeft, Dock = DockStyle.Fill };
+            btns.Controls.Add(ok); btns.Controls.Add(cancel);
+            panel.Controls.Add(btns, 1, 3);
+            f.Controls.Add(panel);
+
+            if (f.ShowDialog(this) == DialogResult.OK)
+            {
+                try
+                {
+                    await _svc.UpdateMemberAsync(memberId, tbName.Text.Trim(), tbEmail.Text.Trim(), tbPhone.Text.Trim());
+                    await ReloadMembersAsync();
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show("更新會員失敗：" + ex.Message);
+                }
+            }
+        }
+
+        private async Task DeleteMemberAsync()
+        {
+            if (gridMembers.CurrentRow?.DataBoundItem == null)
+            {
+                MessageBox.Show("請先選擇一位會員。");
+                return;
+            }
+            var memberIdProp = gridMembers.CurrentRow.DataBoundItem.GetType().GetProperty("MemberId");
+            if (memberIdProp == null) return;
+            int memberId = (int)memberIdProp.GetValue(gridMembers.CurrentRow.DataBoundItem)!;
+
+            var result = MessageBox.Show("確認要刪除此會員嗎？", "刪除確認", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+            if (result == DialogResult.Yes)
+            {
+                try
+                {
+                    await _svc.DeleteMemberAsync(memberId);
+                    await ReloadMembersAsync();
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show("刪除會員失敗：" + ex.Message);
                 }
             }
         }
